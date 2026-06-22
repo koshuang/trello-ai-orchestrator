@@ -1,0 +1,26 @@
+# Go binaries and build outputs
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+trello-ai-orchestrator
+
+# Environment configuration
+.env
+.env.local
+.env.*
+
+# Local SQLite databases
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+
+# Editor / OS files
+.DS_Store
+.idea/
+.vscode/
+*.swp
