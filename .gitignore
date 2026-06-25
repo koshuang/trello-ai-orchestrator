@@ -7,6 +7,10 @@
 *.test
 *.out
 trello-ai-orchestrator
+trello-orchestrator
+
+# Generated plan artifacts
+usecase/docs/
 
 # Environment configuration
 .env
