@@ -240,19 +240,60 @@ func (c *LLMClient) parseResponse(text string) (*domain.LLMResponse, error) {
 	return &response, nil
 }
 
-// Basic decision engine stub for testing/fallback
 func (c *LLMClient) decideStub(input *domain.LLMInput) (*domain.LLMResponse, error) {
-	comment := strings.ToLower(input.NewComment)
-	
+	comment := input.NewComment
+	commentLower := strings.ToLower(comment)
+
+	// Strip leading @mentions for command matching
+	cleaned := stripMentions(commentLower)
+
 	action := "update_state_only"
 	status := "needs_triage"
-	reason := "Fallback stub triggered due to missing LLM_API_KEY"
-	
+	reason := "Fixed behavior (stub decision engine)"
 	var githubIssue *domain.LLMGitHubIssue
 	var plan *domain.LLMPlan
 	replyComment := ""
 
-	if strings.Contains(comment, "create issue") || strings.Contains(comment, "github issue") {
+	if strings.HasPrefix(cleaned, "!issue") {
+		action = "create_github_issue"
+		status = "issue_created"
+		title := extractArg(comment, "!issue", input.CardContext.Title)
+		githubIssue = &domain.LLMGitHubIssue{
+			Title:  title,
+			Body:   fmt.Sprintf("Created from Trello Card: %s\n\nDescription:\n%s", input.CardContext.URL, input.CardContext.Description),
+			Labels: []string{"trello-sync"},
+		}
+	} else if strings.HasPrefix(cleaned, "!plan") {
+		action = "create_plan"
+		status = "plan_created"
+		slug := slugify(input.CardContext.Title)
+		plan = &domain.LLMPlan{
+			Path: fmt.Sprintf("docs/plans/trello-%s-%s.md", input.CardContext.ID, slug),
+			Content: fmt.Sprintf(`# Plan: %s
+
+Trello: %s
+GitHub Issue: %s
+
+## Background
+Proposed plan from !plan command.
+
+## Requirements
+- %s
+`, input.CardContext.Title, input.CardContext.URL, input.WorkflowState.GitHubIssueURL, extractArg(comment, "!plan", "")),
+		}
+	} else if strings.HasPrefix(cleaned, "!run") {
+		action = "reply_comment"
+		status = "implementation_in_progress"
+		scriptName := extractArg(comment, "!run", "default")
+		replyComment = fmt.Sprintf("Acknowledged !run command. Triggering script: %s", scriptName)
+	} else if strings.HasPrefix(cleaned, "!reply") {
+		action = "reply_comment"
+		status = "needs_pm_clarification"
+		replyComment = extractArg(comment, "!reply", "")
+		if replyComment == "" {
+			replyComment = "Hello, thanks for the ping! How can I help?"
+		}
+	} else if strings.Contains(cleaned, "create issue") || strings.Contains(cleaned, "github issue") {
 		action = "create_github_issue"
 		status = "issue_created"
 		githubIssue = &domain.LLMGitHubIssue{
@@ -260,7 +301,7 @@ func (c *LLMClient) decideStub(input *domain.LLMInput) (*domain.LLMResponse, err
 			Body:   fmt.Sprintf("Created from Trello Card: %s\n\nDescription:\n%s", input.CardContext.URL, input.CardContext.Description),
 			Labels: []string{"trello-sync"},
 		}
-	} else if strings.Contains(comment, "create plan") || strings.Contains(comment, "implementation plan") {
+	} else if strings.Contains(cleaned, "create plan") || strings.Contains(cleaned, "implementation plan") {
 		action = "create_plan"
 		status = "plan_created"
 		slug := slugify(input.CardContext.Title)
@@ -281,13 +322,28 @@ Proposed plan background details.
 - ...
 `, input.CardContext.Title, input.CardContext.URL, input.WorkflowState.GitHubIssueURL),
 		}
-	} else if strings.Contains(comment, "reply") || strings.Contains(comment, "clarify") {
+	} else if strings.Contains(cleaned, "run claude") || strings.Contains(cleaned, "run codex") {
+		action = "ask_kos"
+		status = "needs_triage"
+		reason = "AI behavior requested but API key not configured. Would route to Claude/Codex when LLM is enabled."
+	} else if strings.Contains(cleaned, "reply") || strings.Contains(cleaned, "clarify") {
 		action = "reply_comment"
 		status = "needs_pm_clarification"
 		replyComment = "Hello, thanks for the comment! Could you please clarify the requirements further?"
-	} else if strings.Contains(comment, "ignore") {
+	} else if strings.Contains(commentLower, "ignore") {
 		action = "ignore"
 		status = "ignored"
+	} else {
+		reason = "No fixed pattern matched; would fall back to AI behavior when LLM is configured."
+		action = "update_state_only"
+		status = "needs_triage"
+	}
+
+	understanding := []string{fmt.Sprintf("Comment analyzed: %q", input.NewComment)}
+	decisions := []string{fmt.Sprintf("Action selected: %s", action)}
+	openQuestions := []string{}
+	if reason == "No fixed pattern matched; would fall back to AI behavior when LLM is configured." {
+		openQuestions = append(openQuestions, "Would benefit from LLM-driven analysis")
 	}
 
 	return &domain.LLMResponse{
@@ -297,14 +353,38 @@ Proposed plan background details.
 		StateUpdate: domain.LLMStateUpdate{
 			Status:               status,
 			Summary:              fmt.Sprintf("Stub processed comment: %q", input.NewComment),
-			CurrentUnderstanding: []string{"Analyzed comment text via stub parser"},
-			Decisions:            []string{"Fell back to rule stub decision engine"},
-			OpenQuestions:        []string{"Is LLM integration configured correctly?"},
-			NextAction:           "Verify environment variables",
+			CurrentUnderstanding: understanding,
+			Decisions:            decisions,
+			OpenQuestions:        openQuestions,
+			NextAction:           "Verify results",
 		},
 		GitHubIssue: githubIssue,
 		Plan:        plan,
 	}, nil
+}
+
+// stripMentions removes leading @mentions from text for command matching
+func stripMentions(text string) string {
+	// Match one or more leading @mention tokens (e.g. "@bot !plan foo" → "!plan foo")
+	re := regexp.MustCompile(`^(?:@\S+\s+)+`)
+	if loc := re.FindStringIndex(text); loc != nil {
+		return text[loc[1]:]
+	}
+	return text
+}
+
+// extractArg("!issue Fix login bug", "!issue", "default") → "Fix login bug"
+func extractArg(comment, prefix, fallback string) string {
+	lower := strings.ToLower(comment)
+	idx := strings.Index(lower, strings.ToLower(prefix))
+	if idx < 0 {
+		return fallback
+	}
+	after := strings.TrimSpace(comment[idx+len(prefix):])
+	if after == "" {
+		return fallback
+	}
+	return after
 }
 
 func slugify(s string) string {

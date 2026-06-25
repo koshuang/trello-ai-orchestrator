@@ -128,8 +128,23 @@ func (w *WebhookInteractor) ProcessEvent(ctx context.Context, payload *domain.Tr
 		}
 	}
 
-	// 5. Run Decision Engine
+	// 5. @mention filtering — skip LLM call if no bot is @mentioned
 	commentText := action.Data.Text
+	if len(w.cfg.BotTrelloMemberIDs) > 0 && !containsMention(commentText, w.cfg.BotTrelloMemberIDs) {
+		log.Printf("[Orchestrator] Ignored: comment does not @mention any bot user. Marking event as success.")
+		_ = w.eventRepo.Create(ctx, &domain.ProcessedEvent{
+			ID:           "trello-" + actionID,
+			Provider:     "trello",
+			EventID:      actionID,
+			TrelloCardID: cardID,
+			EventType:    eventType,
+			ProcessedAt:  time.Now(),
+			Status:       "success",
+		})
+		return nil
+	}
+
+	// 6. Run Decision Engine
 	rules := getOperatingRules()
 	llmInput := &domain.LLMInput{
 		NewComment:     commentText,
@@ -325,6 +340,21 @@ func extractIssueNumber(url string) int {
 		}
 	}
 	return 0
+}
+
+func containsMention(comment string, botUsernames []string) bool {
+	lower := strings.ToLower(comment)
+	for _, bot := range botUsernames {
+		botLower := strings.ToLower(strings.TrimSpace(bot))
+		if botLower == "" {
+			continue
+		}
+		mention := "@" + botLower
+		if strings.Contains(lower, mention) {
+			return true
+		}
+	}
+	return false
 }
 
 // Utility to write plan file
