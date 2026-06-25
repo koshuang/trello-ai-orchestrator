@@ -41,6 +41,13 @@ run: build
 	PORT=8082 \
 	./$(BINARY)
 
+# --------------- Release ---------------
+release:
+	./scripts/release.sh
+
+release-dry-run:
+	./scripts/release.sh --dry-run
+
 # --------------- Clean ---------------
 clean:
 	rm -f $(BINARY)
