@@ -86,7 +86,7 @@ func UpdateDescriptionWithAIState(desc string, state *domain.WorkflowState) stri
 		}
 	}
 
-	beforeBlock := strings.TrimSuffix(desc[:idx], "\n")
+	beforeBlock := strings.TrimRight(desc[:idx], "\n")
 
 	var result string
 	if len(afterBlockLines) > 0 {

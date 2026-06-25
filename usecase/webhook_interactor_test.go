@@ -126,7 +126,7 @@ func getSamplePayload() *domain.TrelloWebhookPayload {
 				Username: "user_one",
 			},
 			Data: domain.TrelloActionData{
-				Text: "Please process this task.",
+				Text: "@bot_user_1 please process this task.",
 				Card: domain.TrelloCardShort{
 					ID:        "card_123",
 					Name:      "Sample Card Name",
