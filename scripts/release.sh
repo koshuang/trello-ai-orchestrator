@@ -123,6 +123,18 @@ info "Deploy target: ${SSH_DEST}:${REMOTE_PATH}"
 info "Service:       ${SERVICE}"
 echo ""
 
+# ---------- Ensure remote directory exists ----------
+info "Ensuring remote directory exists..."
+if [ "$DRY_RUN" = false ]; then
+  ssh "${SSH_DEST}" "mkdir -p ${REMOTE_PATH}" || {
+    err "Failed to create remote directory ${REMOTE_PATH}"
+    exit 1
+  }
+  ok "Remote directory ready"
+else
+  warn "[dry-run] Would run: ssh ${SSH_DEST} \"mkdir -p ${REMOTE_PATH}\""
+fi
+
 # ---------- Rsync binary ----------
 info "Uploading binary..."
 RSYNC_CMD="rsync -az --no-owner --no-group ${PROJECT_DIR}/${BINARY}.linux ${SSH_DEST}:${REMOTE_PATH}/${BINARY}.new"
