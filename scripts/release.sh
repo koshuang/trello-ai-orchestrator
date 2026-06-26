@@ -187,14 +187,36 @@ fi
 mv "${REMOTE_PATH}/${BINARY}.new" "${REMOTE_PATH}/${BINARY}"
 chmod +x "${REMOTE_PATH}/${BINARY}"
 
+# Create systemd unit if it doesn't exist
+UNIT_PATH="/etc/systemd/system/${SERVICE}.service"
+if [ ! -f "$UNIT_PATH" ]; then
+  sudo tee "$UNIT_PATH" >/dev/null <<UNIT
+[Unit]
+Description=Trello AI Orchestrator
+After=network.target
+
+[Service]
+Type=simple
+User=${USER}
+WorkingDirectory=${REMOTE_PATH}
+ExecStart=${REMOTE_PATH}/${BINARY}
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+  sudo systemctl daemon-reload
+  sudo systemctl enable "${SERVICE}"
+fi
+
 # Restart service
-systemctl daemon-reload 2>/dev/null || true
-systemctl restart "${SERVICE}"
+sudo systemctl restart "${SERVICE}"
 
 # Show status
 sleep 2
-systemctl is-active "${SERVICE}" >/dev/null && echo "Service is active" || echo "Service is NOT active"
-systemctl status "${SERVICE}" --no-pager -l | head -10
+sudo systemctl is-active "${SERVICE}" >/dev/null && echo "Service is active" || echo "Service is NOT active"
+sudo systemctl status "${SERVICE}" --no-pager -l | head -15
 SCRIPT
 )
 
