@@ -126,13 +126,13 @@ echo ""
 # ---------- Ensure remote directory exists ----------
 info "Ensuring remote directory exists..."
 if [ "$DRY_RUN" = false ]; then
-  ssh "${SSH_DEST}" "mkdir -p ${REMOTE_PATH}" || {
+  ssh "${SSH_DEST}" "sudo mkdir -p ${REMOTE_PATH} && sudo chown ${USER}:${USER} ${REMOTE_PATH}" || {
     err "Failed to create remote directory ${REMOTE_PATH}"
     exit 1
   }
   ok "Remote directory ready"
 else
-  warn "[dry-run] Would run: ssh ${SSH_DEST} \"mkdir -p ${REMOTE_PATH}\""
+  warn "[dry-run] Would run: ssh ${SSH_DEST} \"sudo mkdir -p ${REMOTE_PATH} && sudo chown ${USER}:${USER} ${REMOTE_PATH}\""
 fi
 
 # ---------- Rsync binary ----------
